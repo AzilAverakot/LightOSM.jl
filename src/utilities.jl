@@ -280,3 +280,26 @@ function flatten(array::AbstractArray)::AbstractArray
     end
     return flattened
 end
+
+"""
+    calculate_direction(point1::Vector{Float64},point2::Vector{Float64})::String
+
+Returns the direction of point2 from point1, if both points have same cooridinates it will return "N"
+"""
+function calculate_direction(point1::Vector{Float64},point2::Vector{Float64})::String
+    directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    # Calculate the difference in latitudes and longitudes
+    dlat = point2[1] - point1[1]
+    dlon = point2[2] - point1[2]
+    # Calculate the angle from north (clockwise) in degrees
+    angle = atan(dlon, dlat) * (180 / pi)
+    # Ensure the angle is positive
+    if angle < 0
+        angle += 360
+    end
+    # Calculate the index for the cardinal direction
+    index = round(Int, angle / 22.5) % 16
+    # Get the cardinal direction from the directions array
+    direction = directions[index + 1]
+    return direction
+end

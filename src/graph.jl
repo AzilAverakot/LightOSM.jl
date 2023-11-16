@@ -41,12 +41,15 @@ function graph_from_object(osm_data_object::Union{XMLDocument,Dict};
                            graph_type::Symbol=:static,
                            precompute_dijkstra_states::Bool=false,
                            largest_connected_component::Bool=true,
-                           filter_network_type::Bool=true
+                           filter_network_type::Bool=true,
+                           add_intersections::Bool=false
                            )::OSMGraph
     g = init_graph_from_object(osm_data_object, network_type, filter_network_type=filter_network_type)
     add_node_and_edge_mappings!(g)
     add_weights!(g, weight_type)
     add_graph!(g, graph_type)
+    # Add intersections
+    add_intersections && add_intersection_tags(g, Blobify.get_intersections(g));
     # Finding connected components can only be done after LightGraph object has been constructed
     largest_connected_component && trim_to_largest_connected_component!(g, g.graph, weight_type, graph_type) # Pass in graph to make type stable
     add_node_tags!(g)
@@ -70,7 +73,9 @@ end
                     weight_type::Symbol=:time,
                     graph_type::Symbol=:static,
                     precompute_dijkstra_states::Bool=false,
-                    largest_connected_component::Bool=true
+                    largest_connected_component::Bool=true,
+                    filter_network_type::Bool=true,
+                    add_intersections::Bool=false
                     )::OSMGraph
 
 Creates an `OSMGraph` object from a downloaded OpenStreetMap network data file, the extention must be either `.json`, `.osm` or `.xml`.
@@ -95,7 +100,8 @@ function graph_from_file(file_path::String;
                          graph_type::Symbol=:static,
                          precompute_dijkstra_states::Bool=false,
                          largest_connected_component::Bool=true,
-                         filter_network_type::Bool=true
+                         filter_network_type::Bool=true,
+                         add_intersections::Bool=false
                          )::OSMGraph
 
     !isfile(file_path) && throw(ArgumentError("File $file_path does not exist"))
@@ -107,7 +113,8 @@ function graph_from_file(file_path::String;
                              graph_type=graph_type,
                              precompute_dijkstra_states=precompute_dijkstra_states,
                              largest_connected_component=largest_connected_component,
-                             filter_network_type=filter_network_type)
+                             filter_network_type=filter_network_type,
+                             add_intersections=add_intersections)
 end
 
 """
@@ -120,6 +127,8 @@ end
                         graph_type::Symbol=:static,
                         precompute_dijkstra_states::Bool=false,
                         largest_connected_component::Bool=true,
+                        filter_network_type::Bool=true,
+                        add_intersections::Bool=false
                         download_kwargs...
                         )::OSMGraph
 
@@ -180,6 +189,7 @@ function graph_from_download(download_method::Symbol;
                              precompute_dijkstra_states::Bool=false,
                              largest_connected_component::Bool=true,
                              filter_network_type::Bool=true,
+                             add_intersections::Bool=false,
                              download_kwargs...
                              )::OSMGraph
     obj = download_osm_network(download_method,
@@ -194,7 +204,8 @@ function graph_from_download(download_method::Symbol;
                              graph_type=graph_type,
                              precompute_dijkstra_states=precompute_dijkstra_states,
                              largest_connected_component=largest_connected_component,
-                             filter_network_type=filter_network_type)
+                             filter_network_type=filter_network_type,
+                             add_intersections=add_intersections)
 end
 
 
@@ -561,5 +572,22 @@ function get_graph_type(g::OSMGraph)
         return :meta
     else
         throw(ErrorException("Graph is of unexpected type $graph_type"))
+    end
+end
+
+"""
+add_intersection_tags(g::OSMGraph, intersections)
+
+Loops through the intersections and adds intersection tag to nodes.
+"""
+function add_intersection_tags(g::OSMGraph, intersections)
+    for (index, intersection) in enumerate(intersections)
+        for node in intersection.centroid_nodes
+            if haskey(g.nodes[node].tags, "intersections")
+                push!(g.nodes[node].tags["intersections"], index)
+            else
+                g.nodes[node].tags["intersections"] = [index]
+            end
+        end
     end
 end

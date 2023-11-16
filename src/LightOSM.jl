@@ -5,7 +5,7 @@ using DataStructures: DefaultDict, OrderedDict, MutableLinkedList
 using QuickHeaps: BinaryHeap, FastMin
 using Statistics: mean
 using SparseArrays: SparseMatrixCSC, sparse, findnz
-using Graphs: AbstractGraph, DiGraph, nv, outneighbors, weakly_connected_components, vertices
+using Graphs: AbstractGraph, DiGraph, nv, outneighbors, weakly_connected_components, vertices, all_neighbors
 using StaticGraphs: StaticDiGraph
 using SimpleWeightedGraphs: SimpleWeightedDiGraph
 using MetaGraphs: MetaDiGraph, set_prop!
@@ -15,6 +15,7 @@ using JSON
 using LightXML
 using StaticArrays
 using SpatialIndexing
+using Blobify
 
 export GeoLocation,
        OSMGraph,

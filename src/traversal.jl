@@ -327,3 +327,136 @@ function path_from_parents(parents::P, goal::V, path_length::N) where {P <: Unio
 
     return path
 end
+
+"""
+get_nearest_intersection_details(
+        g::OSMGraph{U},
+        weights::AbstractMatrix{T},
+        source_point::Vector{Float64},
+        radius_in_meteres::R
+        ) where {T <: Real, U <: Integer, W <: Integer, R <: Integer}
+
+Top level function that finds nearest intersection, direction from the intersection to the given point and the path length.
+
+# Arguments
+- `g::AbstractGraph{U}`: Graphs abstract graph object.
+- `weights::AbstractMatrix{T}`: Edge weights matrix.
+- `source_point::Vector{Float64`: Point on the way to find nearest node to.
+- `radius_in_meteres::R`: Maximum straight line haversine distance from the given point up to intersection.
+
+# Return
+- `intersection{Integer}`: Index of the start node on the graph.
+- `direction{String}`: Index of the parent node through which the intersection was reached. Used to calculate the direction.
+- `distance{Float64}`: Array parent veritces from which the shortest path can be extracted.
+"""
+function get_nearest_intersection_details(
+    g::OSMGraph{U},
+    weights::AbstractMatrix{T},
+    source_point::Vector{Float64},
+    radius_in_meteres::R=1000
+    ) where {T <: Real, U <: Integer, W <: Integer, R <: Integer}
+# Get nearest node to the given point
+n_start = nearest_node(g, source_point)[1]
+n_start_index = g.node_to_index[n_start]
+return get_nearest_intersection_details(g, weights, n_start_index,radius_in_meteres)
+end
+"""
+get_nearest_intersection_details(
+        g::OSMGraph{U},
+        weights::AbstractMatrix{T},
+        source_point::Vector{Float64},
+        radius_in_meteres::R
+        ) where {T <: Real, U <: Integer, W <: Integer, R <: Integer}
+
+Top level function that finds nearest intersection, direction from the intersection to the given point and the path length.
+NOTE: Takes nod index as input, not ID! 
+
+# Arguments
+- `g::AbstractGraph{U}`: Graphs abstract graph object.
+- `weights::AbstractMatrix{T}`: Edge weights matrix.
+- `source_point::Vector{Float64`: Point on the way to find nearest node to.
+- `radius_in_meteres::R`: Maximum straight line haversine distance from the given point up to intersection.
+
+# Return
+- `intersection{Integer}`: Index of the start node on the graph.
+- `direction{String}`: Index of the parent node through which the intersection was reached. Used to calculate the direction.
+- `distance{Float64}`: Array parent veritces from which the shortest path can be extracted.
+"""
+function get_nearest_intersection_details(
+            g::OSMGraph{U},
+            weights::AbstractMatrix{T},
+            n_start_index::W,
+            radius_in_meteres::R=1000
+            ) where {T <: Real, U <: Integer, W <: Integer, R <: Integer}
+  intersection, parent, distance = dijkstra_nearest_intersection(g, weights, n_start_index, radius_in_meteres)
+  direction = calculate_direction(g.node_coordinates[intersection], g.node_coordinates[parent])
+  return intersection, direction, distance
+end
+
+
+"""
+  dijkstra_nearest_intersection(
+          g::OSMGraph{U},
+          weights::AbstractMatrix{T},
+          source_node_index::W,
+          radius_in_meteres::R
+          ) where {T <: Real, U <: Integer, W <: Integer, R <: Integer}
+
+Dijkstra's shortest path algorithm implemented to loop through all the possible paths from the given node 
+withing the given radius to find nearest intersection.
+Disregards the directionality of the paths to find the closest intersection by way length. 
+Returns index of the intersection node, parent node to be used to find the direction and path length in meters. 
+
+# Arguments
+- `g::AbstractGraph{U}`: Graphs abstract graph object.
+- `weights::AbstractMatrix{T}`: Edge weights matrix.
+- `source_node_index::W`: Source node index.
+- `radius_in_meteres::R`: Maximum straight line haversine distance from the given point up to intersection.
+
+# Return
+- `node_index{W}`: Index of the start node on the graph.
+- `previous_node[node_index]{W}`: Index of the parent node through which the intersection was reached. Used to calculate the direction.
+- `dists[node_index]{W}`: Array parent veritces from which the shortest path can be extracted.
+"""
+function dijkstra_nearest_intersection(
+        g::OSMGraph{U},
+        weights::AbstractMatrix{T},
+        source_node_index::W,
+        radius_in_meteres::R=1000
+        ) where {T <: Real, U <: Integer, W <: Integer, R <: Integer}
+# Preallocate
+heap = BinaryHeap{Tuple{T, U}}(FastMin) # (weight, current)
+num_verts = nv(g.graph)
+dists = fill(typemax(T), num_verts) # Prefilling with infinities to later replace with distances, might not need it
+previous_node = zeros(U, num_verts)
+visited = zeros(Bool, num_verts) # Can use set
+# Initialize src
+push!(heap, (zero(T), source_node_index))
+dists[source_node_index] = zero(T)
+previous_node[source_node_index] = source_node_index
+while !isempty(heap)
+  weight, node_index = pop!(heap)
+  node = g.index_to_node[node_index]
+  # Check if this node is an intersection and return this node, previous node (to find direction), distance between source and this node
+  haskey(g.nodes[node].tags, "intersections") && return node_index, previous_node[node_index], dists[node_index]
+  visited[node_index] && continue
+  visited[node_index] = true
+  
+  # Note: can't check inside this loop if it's an intersection since it doesn't guarantee having the shortest path length
+  for neighbor_index in all_neighbors(g.graph, node_index)
+      # Check if it has been visited
+      visited[neighbor_index] && continue
+      # Check if it's inside of the radius
+      haversine(g.node_coordinates[neighbor_index], g.node_coordinates[node_index]) > radius_in_meteres && continue
+      new_dist_to_neighbor = weight + max(weights[node_index, neighbor_index], weights[neighbor_index, node_index]) # Calculate new neighbor's weight as the weight of the current node and the neighbor's node
+      # Check if existing distance to the neighbor is shorter than the previous one
+      if new_dist_to_neighbor < dists[neighbor_index]
+          dists[neighbor_index] = new_dist_to_neighbor
+          previous_node[neighbor_index] = node_index # Save previous node index as a parent_node
+          push!(heap, (new_dist_to_neighbor, neighbor_index))
+      end
+  end
+end
+# If no intersection is found
+return nothing
+end
